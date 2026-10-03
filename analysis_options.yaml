@@ -1,0 +1,18 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+  errors:
+    # Flutter keeps renaming theme/data classes between minor releases; don't
+    # let a newer SDK's deprecation notices fail the hackathon build.
+    deprecated_member_use: ignore
+
+linter:
+  rules:
+    # Style-only lints off so `flutter analyze` reports real problems, not noise.
+    prefer_const_constructors: false
+    prefer_const_literals_to_create_immutables: false
+    prefer_const_constructors_in_immutables: false
+    avoid_print: true
+    use_build_context_synchronously: true

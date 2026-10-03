@@ -1,0 +1,43 @@
+rules_version = '2';
+// RescueGrid Firestore rules — prepared for the Firebase backend.
+// Role is stored in /users/{uid}.role (set by an admin / Cloud Function, never by the client).
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function role() { return get(/databases/$(db)/documents/users/$(request.auth.uid)).data.role; }
+    function isAdmin() { return signedIn() && role() == 'admin'; }
+    function isResponder() { return signedIn() && role() == 'responder'; }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || isResponder());
+      allow write: if isAdmin();
+    }
+
+    match /responders/{rid} {
+      allow read: if signedIn();
+      // Responders may update only their own status/location; admins anything.
+      allow update: if isAdmin() || (isResponder() && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','location','lastUpdated']));
+      allow create, delete: if isAdmin();
+    }
+
+    match /incidents/{id} {
+      // Ownership: students read only their own incidents.
+      allow read: if isAdmin() || isResponder()
+        || (signedIn() && resource.data.reporterId == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.status == 'reported'
+        && request.resource.data.peopleAffected is int && request.resource.data.peopleAffected >= 1
+        && request.resource.data.description.size() <= 500;
+      // Assigned responder may progress status; admin may do anything.
+      allow update: if isAdmin() || (isResponder() && resource.data.assignedResponderUid == request.auth.uid);
+      allow delete: if false;
+
+      match /timeline/{eventId} {
+        allow read: if isAdmin() || isResponder() || (signedIn() && get(/databases/$(db)/documents/incidents/$(id)).data.reporterId == request.auth.uid);
+        allow create: if signedIn();
+        allow update, delete: if false; // audit log is append-only
+      }
+    }
+  }
+}
